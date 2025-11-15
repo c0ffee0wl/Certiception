@@ -15,19 +15,25 @@
 - name: Install Certification Authority role
   ansible.windows.win_powershell:
     script: |
-      $AdministratorPassword = ConvertTo-SecureString "{{ domain_password }}" -AsPlainText -Force
-      $PSCredential = New-Object System.Management.Automation.PSCredential ("{{ domain_username }}", $AdministratorPassword)
-      Install-AdcsCertificationAuthority -Credential $PSCredential -CAType EnterpriseRootCA -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" -KeyLength 2048 -HashAlgorithmName SHA256 -ValidityPeriod Years -ValidityPeriodUnits 5 -CACommonName "{{ ca_common_name }}" -Force
+      # Check if CA is already installed to ensure idempotency
+      $caConfig = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\CertSvc\Configuration" -ErrorAction SilentlyContinue
+      if (-not $caConfig) {
+        $AdministratorPassword = ConvertTo-SecureString "{{ domain_password }}" -AsPlainText -Force
+        $PSCredential = New-Object System.Management.Automation.PSCredential ("{{ domain_username }}", $AdministratorPassword)
+        Install-AdcsCertificationAuthority -Credential $PSCredential -CAType EnterpriseRootCA -CryptoProviderName "RSA#Microsoft Software Key Storage Provider" -KeyLength 2048 -HashAlgorithmName SHA256 -ValidityPeriod Years -ValidityPeriodUnits 5 -CACommonName "{{ ca_common_name }}" -Force
+      }
   vars:
     domain_username: "{{ ea_admin }}@{{ domain_fqdn }}"
     domain_password: "{{ ea_admin_password }}"
     ca_common_name: "{{ ca_name }}"
 
-# is a dependency of the ADCSTemplate PowerShell Module 
+# is a dependency of the ADCSTemplate PowerShell Module
 - name: Install ActiveDirectory PowerShell Module
   ansible.windows.win_powershell:
     script: Install-WindowsFeature -Name RSAT-AD-Tools
 
+# Using fork of ADCSTemplate (original: https://github.com/GoateePFE/ADCSTemplate)
+# This fork includes compatibility fixes for the template setup process
 - name: Clone ADCSTemplate repo
   delegate_to: localhost
   ansible.builtin.git:
